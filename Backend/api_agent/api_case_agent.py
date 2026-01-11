@@ -6,7 +6,9 @@ from autogen_core import type_subscription, RoutedAgent, message_handler, Messag
 
 from Backend.api_agent.llm_models.llm_models import json_format_model
 from Backend.api_agent.prompt_words.api_agent_prompt import api_structure_case_prompt, fix_agent_prompt
+from Backend.controller.api_test_case import api_testcase_create_controller
 from Backend.core.messages import FinalTestCase
+from Backend.schemas.api_case import APITestCaseCreate
 
 
 @type_subscription("api_structure_case")
@@ -99,4 +101,36 @@ class APITestCaseStructureAgent(RoutedAgent):
         except Exception as e:
             print(f"API用例结构化出错{e}")
 
-#api
+
+# api_case_into_db
+@type_subscription(topic_type="api_case_in_db")
+class APITestCaseIntoDBAgent(RoutedAgent):
+    """将结构化的测试用例存储到数据库中"""
+
+    def __init__(self):
+        super().__init__("apicase_into_db_agent")
+
+    @message_handler
+    async def handle_message(self, message: FinalTestCase, ctx: MessageContext) -> None:
+        print('*' * 10 + 'apicase_into_db_agent' + '*' * 10)
+        print("准备数据入库")
+        try:
+            test_cases_json = json.loads(message.final_testcase_json)
+        except json.JSONDecodeError as e:
+            import ast
+            data = ast.literal_eval(message.final_testcase_json)
+            if isinstance(data, dict) and "testcases" in data:
+                test_cases_json = data["testcases"]
+            else:
+                test_cases_json = data
+
+        validated_cases = [APITestCaseCreate.model_validate(case_data) for case_data in test_cases_json]
+        save_count = 0
+        for case in validated_cases:
+            try:
+                await api_testcase_create_controller.create_apicase_with_steps(case_in=case)
+                save_count += 1
+            except Exception as e:
+                print(f"数据验证出错{str(e)}")
+                continue
+        print(f"数据入库成功，共{save_count}个用例")
