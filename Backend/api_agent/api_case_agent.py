@@ -2,10 +2,11 @@ import json
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import TaskResult
-from autogen_core import type_subscription, RoutedAgent, message_handler, MessageContext
+from autogen_core import type_subscription, RoutedAgent, message_handler, MessageContext, TopicId
 
 from Backend.api_agent.llm_models.llm_models import json_format_model
 from Backend.api_agent.prompt_words.api_agent_prompt import api_structure_case_prompt, fix_agent_prompt
+from Backend.core.messages import FinalTestCase
 
 
 @type_subscription("api_structure_case")
@@ -70,6 +71,8 @@ class APITestCaseStructureAgent(RoutedAgent):
             out_result = json.loads(structure_json_str)
             print(f"json结构化成功，共{len(out_result['testcases'])}个用例")
             # 发送给下一个智能体
+            await self.publish_message(FinalTestCase(final_testcase_json=out_result),
+                                       topic_id=TopicId(type="api_case_in_db", source=self.id.key))
 
         except json.JSONDecodeError as e:
             # 尝试修复json格式错误
@@ -87,10 +90,13 @@ class APITestCaseStructureAgent(RoutedAgent):
                 json.loads(fixed_content)
                 print(f"修复成功，修复过后的结果是{fixed_content}")
                 # 发送给下一个智能体
-
+                await self.publish_message(FinalTestCase(final_testcase_json=fixed_content),
+                                           topic_id=TopicId(type="api_case_in_db", source=self.id.key))
 
             except json.JSONDecodeError as e:
                 print(f"修复后的结果不是有效的json{str(e)}")
                 raise e
         except Exception as e:
             print(f"API用例结构化出错{e}")
+
+#api
